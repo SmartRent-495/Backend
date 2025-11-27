@@ -1,7 +1,5 @@
 # dependencies
 node_modules/
-backend/node_modules/
-frontend/node_modules/
 .pnp.cjs
 .pnp.loader.mjs
 
@@ -21,10 +19,6 @@ lerna-debug.log*
 
 # Env / secrets
 .env*
-backend/.env
-backend/.env.*
-.env.local
-frontend/.env.local
 .env.production
 
 # Firebase
@@ -43,4 +37,3 @@ Thumbs.db
 .vscode/
 .idea/
 backend/.env
-frontend/.env
