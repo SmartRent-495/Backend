@@ -33,15 +33,6 @@ SmartRent is a comprehensive web-based property and rental management system bui
 
 ## 🛠️ Tech Stack
 
-### Frontend
-- **Framework**: React with Next.js 15
-- **UI Library**: Material-UI (MUI) v7
-- **State Management**: React Context API
-- **Form Handling**: React Hook Form with Zod validation
-- **Charts**: ApexCharts & Chart.js
-- **Styling**: Emotion CSS-in-JS
-- **Icons**: Phosphor Icons
-
 ### Backend
 - **Runtime**: Node.js with Express.js
 - **Database**: 
@@ -60,7 +51,7 @@ SmartRent is a comprehensive web-based property and rental management system bui
   - Cloud Storage (File storage)
   - Authentication (Optional)
   - Hosting (Optional)
-- **Frontend Hosting**: Vercel / Render
+
 - **Payment Gateway**: Stripe / Paddle
 
 ## 📁 Project Structure
@@ -119,15 +110,9 @@ SmartRent/
    ```bash
    cd backend
    npm install
-   ```
 
-3. **Install Frontend Dependencies**
-   ```bash
-   cd ../frontend
-   npm install
-   ```
 
-4. **Configure Environment Variables**
+3. **Configure Environment Variables**
 
    Backend (.env):
    ```env
@@ -136,35 +121,26 @@ SmartRent/
    STRIPE_SECRET_KEY=your_stripe_secret_key
    STRIPE_WEBHOOK_SECRET=your_stripe_webhook_secret
    DATABASE_PATH=./smartrent.db
+
+   FIREBASE_PROJECT_ID= your_firebase_project_ID
+   FIREBASE_STORAGE_BUCKET= your_firebase_storage_bucket
    ```
 
-   Frontend (.env.local):
-   ```env
-   NEXT_PUBLIC_API_URL=http://localhost:5000
-   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=your_stripe_publishable_key
-   ```
 
-5. **Run Database Migrations**
+
+4. **Run Database Migrations**
    ```bash
    cd backend
    npm run migrate
    ```
 
-### Running the Application
-
-1. **Start Backend Server**
+5. **Start Backend Server**
    ```bash
    cd backend
    npm run dev
    ```
    Server runs on http://localhost:5000
 
-2. **Start Frontend Development Server**
-   ```bash
-   cd frontend
-   npm run dev
-   ```
-   Application runs on http://localhost:3000
 
 ## 📱 User Roles
 
@@ -215,31 +191,11 @@ SmartRent/
 
 ## 🧪 Testing
 
-```bash
-# Run frontend tests
-cd frontend
-npm test
-
 # Run backend tests
 cd backend
 npm test
 ```
 
-## 📦 Deployment
-
-### Frontend (Vercel)
-```bash
-cd frontend
-npm run build
-# Deploy to Vercel
-vercel deploy --prod
-```
-
-### Backend (Render/Heroku)
-```bash
-cd backend
-# Deploy according to platform instructions
-```
 
 ### Firebase (Production Database)
 1. Set up Firebase project
@@ -269,7 +225,7 @@ cd backend
 
 This project is licensed under the MIT License.
 
-## 📞 Contact
+## 📖 Course Details
 
 - **Course**: CNG 495 - Cloud Computing
 - **Semester**: Fall 2025
