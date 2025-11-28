@@ -1,4 +1,8 @@
+<<<<<<< HEAD
+/**
+=======
 /*
+>>>>>>> 9b6c7c14e197ba0b7e1be3dbedfe90e947e7941c
  * Maintenance Service - Firestore Operations
  * 
  * Handles all maintenance request-related database operations using Firestore
