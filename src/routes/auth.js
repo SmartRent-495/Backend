@@ -204,10 +204,13 @@ router.post('/firebase-register', authenticateFirebaseOnly, async (req, res) => 
   } catch (error) {
     console.error('❌ [Firebase Register] Exception:', error);
     console.error('❌ Error stack:', error.stack);
+    console.error('❌ Error name:', error.name);
+    console.error('❌ Error message:', error.message);
     return res.status(500).json({
       status: 'error',
       message: 'Server error during registration',
-      details: error.message
+      details: error.message,
+      errorName: error.name
     });
   }
 });
