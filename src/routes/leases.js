@@ -3,6 +3,57 @@ const router = express.Router();
 const { authenticateToken, requireLandlord } = require('../middleware/auth');
 const { admin } = require('../config/firebase');
 
+// GET /api/leases/tenant - Get tenant's leases (convenience endpoint)
+router.get('/tenant', authenticateToken, async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const db = admin.firestore();
+    
+    console.log(`[GET /leases/tenant] User: ${userId}`);
+    
+    const snapshot = await db.collection('leases')
+      .where('tenantId', '==', userId)
+      .get();
+    
+    if (snapshot.empty) {
+      return res.json({ leases: [] });
+    }
+    
+    const leases = [];
+    
+    for (const doc of snapshot.docs) {
+      const leaseData = doc.data();
+      
+      // Get property details
+      let propertyData = null;
+      try {
+        const propertyDoc = await db.collection('properties').doc(leaseData.propertyId).get();
+        if (propertyDoc.exists) {
+          propertyData = propertyDoc.data();
+        }
+      } catch (err) {
+        console.error('Error fetching property:', err);
+      }
+      
+      leases.push({
+        id: doc.id,
+        ...leaseData,
+        propertyTitle: propertyData?.title,
+        propertyAddress: propertyData?.address,
+        propertyCity: propertyData?.city,
+      });
+    }
+    
+    res.json({ leases });
+  } catch (error) {
+    console.error('[GET /leases/tenant] Error:', error);
+    res.status(500).json({
+      error: 'Failed to fetch leases',
+      details: error.message
+    });
+  }
+});
+
 // GET /api/leases - Get all leases for the authenticated user
 router.get('/', authenticateToken, async (req, res) => {
   try {
@@ -92,8 +143,6 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // POST /api/leases - Create new lease
-// POST /api/leases - Create new lease
-// POST /api/leases - Create new lease
 router.post('/', authenticateToken, requireLandlord, async (req, res) => {
   try {
     const landlordId = req.user.userId;
@@ -145,7 +194,7 @@ router.post('/', authenticateToken, requireLandlord, async (req, res) => {
       });
     }
 
-    const propertyData = propertyDoc.data(); // ✅ Declare it here
+    const propertyData = propertyDoc.data();
     
     if (propertyData.landlordId !== landlordId) {
       console.error('[POST /leases] Property does not belong to landlord');
@@ -166,7 +215,7 @@ router.post('/', authenticateToken, requireLandlord, async (req, res) => {
       });
     }
 
-    const tenantData = tenantDoc.data(); // ✅ Declare it here
+    const tenantData = tenantDoc.data();
     
     if (tenantData.role !== 'tenant') {
       console.error('[POST /leases] User is not a tenant');
@@ -226,6 +275,86 @@ router.post('/', authenticateToken, requireLandlord, async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Failed to create lease',
+      details: error.message
+    });
+  }
+});
+
+// GET /api/leases/:id - Get a specific lease by ID
+router.get('/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, role } = req.user;
+    const db = admin.firestore();
+    
+    console.log(`[GET /leases/:id] User: ${userId}, Role: ${role}, Lease ID: ${id}`);
+    
+    const leaseDoc = await db.collection('leases').doc(id).get();
+    
+    if (!leaseDoc.exists) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Lease not found'
+      });
+    }
+    
+    const leaseData = leaseDoc.data();
+    
+    // Check authorization - user must be tenant, landlord, or admin
+    const isAuthorized = 
+      role === 'admin' ||
+      leaseData.tenantId === userId ||
+      leaseData.landlordId === userId;
+    
+    if (!isAuthorized) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Unauthorized'
+      });
+    }
+    
+    // Get property details
+    let propertyData = null;
+    try {
+      const propertyDoc = await db.collection('properties').doc(leaseData.propertyId).get();
+      if (propertyDoc.exists) {
+        propertyData = propertyDoc.data();
+      }
+    } catch (err) {
+      console.error('Error fetching property:', err);
+    }
+    
+    // Get tenant details
+    let tenantData = null;
+    try {
+      const tenantDoc = await db.collection('users').doc(leaseData.tenantId).get();
+      if (tenantDoc.exists) {
+        tenantData = tenantDoc.data();
+      }
+    } catch (err) {
+      console.error('Error fetching tenant:', err);
+    }
+    
+    res.json({
+      status: 'success',
+      data: {
+        id: leaseDoc.id,
+        ...leaseData,
+        // Property details
+        propertyTitle: propertyData?.title,
+        propertyAddress: propertyData?.address,
+        propertyCity: propertyData?.city,
+        // Tenant details
+        tenantName: tenantData?.displayName,
+        tenantEmail: tenantData?.email,
+        tenantPhone: tenantData?.phoneNumber
+      }
+    });
+  } catch (error) {
+    console.error('[GET /leases/:id] Error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to fetch lease',
       details: error.message
     });
   }

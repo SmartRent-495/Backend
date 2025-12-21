@@ -8,9 +8,9 @@ SmartRent is a comprehensive web-based property and rental management system bui
 
 ## 👥 Team Members
 
-- **Mahlet Bekele** - 2643146 (Frontend Development)
-- **Zeeshan Imran** - 2640779 (API Development & Integration)
-- **Miguel Tunga Mbabazi** - 2600195 (Database Setup & Management)
+- **Mahlet Bekele** -  (Frontend Development)
+- **Zeeshan Imran** -  (API Development & Integration)
+- **Miguel Tunga Mbabazi** -  (Database Setup & Management)
 
 ## ✨ Features
 
