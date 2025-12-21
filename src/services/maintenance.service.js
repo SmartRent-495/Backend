@@ -1,4 +1,4 @@
-/*
+/**
  * Maintenance Service - Firestore Operations
  * 
  * Handles all maintenance request-related database operations using Firestore

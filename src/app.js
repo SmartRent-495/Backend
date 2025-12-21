@@ -51,6 +51,14 @@ app.use('/api/payments', paymentsRouter);
 // Authentication routes
 app.use('/api/auth', require('./routes/auth'));
 
+const adminBootstrapRoutes = require('./routes/admin-bootstrap');
+app.use('/api/admin-bootstrap', adminBootstrapRoutes);
+
+
+const adminRoutes = require('./routes/admin');
+app.use('/api/admin', adminRoutes);
+
+
 // SmartRent Property Management routes
 app.use('/api/properties', require('./routes/properties'));
 app.use('/api/leases', require('./routes/leases'));
