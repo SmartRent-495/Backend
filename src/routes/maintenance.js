@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { authenticateToken, requireLandlord } = require('../middleware/auth');
 const { admin } = require('../config/firebase');
+const { getMaintenanceService } = require('../services/maintenance.service');
+const maintenanceService = getMaintenanceService();
 
 // GET /api/maintenance - Get all maintenance requests
 router.get('/', authenticateToken, async (req, res) => {
@@ -144,8 +146,8 @@ router.post('/', authenticateToken, async (req, res) => {
       });
     }
 
+    // Get property to retrieve landlordId
     const db = admin.firestore();
-    
     const propertyDoc = await db.collection('properties').doc(property_id).get();
     
     if (!propertyDoc.exists) {
@@ -156,68 +158,50 @@ router.post('/', authenticateToken, async (req, res) => {
     }
     
     const propertyData = propertyDoc.data();
-    const landlordId = propertyData.landlordId;
-    
-    const leasesSnapshot = await db.collection('leases')
-      .where('propertyId', '==', property_id)
-      .where('tenantId', '==', userId)
-      .where('status', '==', 'active')
-      .get();
-    
-    if (leasesSnapshot.empty) {
-      return res.status(403).json({
-        status: 'error',
-        message: 'You do not have an active lease for this property'
-      });
-    }
-
-    // Check for duplicate
-    const existingRequestsSnapshot = await db.collection('maintenance')
-      .where('propertyId', '==', property_id)
-      .where('tenantId', '==', userId)
-      .where('title', '==', title)
-      .get();
-    
-    const hasOpenRequest = existingRequestsSnapshot.docs.some(doc => {
-      const data = doc.data();
-      return data.status === 'pending' || data.status === 'in_progress';
-    });
-    
-    if (hasOpenRequest) {
-      return res.status(409).json({
-        status: 'error',
-        message: 'You already have an open maintenance request with this title for this property. Please wait until it is resolved or use a different title.'
-      });
-    }
 
     const requestData = {
       propertyId: property_id,
       tenantId: userId,
-      landlordId: landlordId,
-      title: title,
-      description: description,
+      landlordId: propertyData.landlordId,
+      title,
+      description,
       category: category || 'other',
-      priority: priority || 'medium',
-      status: 'pending',
-      images: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      priority: priority || 'medium'
     };
 
-    const requestRef = await db.collection('maintenance').add(requestData);
+    const request = await maintenanceService.createMaintenanceRequest(requestData);
     
-    console.log('[POST /maintenance] ✅ Request created:', requestRef.id);
+    console.log('[POST /maintenance] ✅ Request created:', request.id);
 
     res.status(201).json({
       status: 'success',
       message: 'Maintenance request created successfully',
-      data: {
-        id: requestRef.id,
-        ...requestData
-      }
+      data: request
     });
   } catch (error) {
     console.error('[POST /maintenance] ❌ Error:', error);
+    
+    if (error.message.includes('not found')) {
+      return res.status(404).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+    
+    if (error.message.includes('do not have an active lease')) {
+      return res.status(403).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+    
+    if (error.message.includes('already have an open')) {
+      return res.status(409).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+    
     res.status(500).json({
       status: 'error',
       message: 'Failed to create maintenance request',
@@ -330,9 +314,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       });
     }
     
-    const updateData = {
-      updatedAt: new Date().toISOString()
-    };
+    const updateData = {};
     
     if (status !== undefined) updateData.status = status;
     if (contractor_name !== undefined) updateData.contractorName = contractor_name;
@@ -342,22 +324,25 @@ router.put('/:id', authenticateToken, async (req, res) => {
     if (notes !== undefined) updateData.notes = notes;
     if (priority !== undefined) updateData.priority = priority;
     
-    await docRef.update(updateData);
+    const updatedRequest = await maintenanceService.updateMaintenanceRequest(id, updateData);
     
     console.log(`[PUT /maintenance/:id] ✅ Updated maintenance request: ${id}`);
-    
-    const updatedDoc = await docRef.get();
     
     res.json({
       status: 'success',
       message: 'Maintenance request updated successfully',
-      data: {
-        id: updatedDoc.id,
-        ...updatedDoc.data()
-      }
+      data: updatedRequest
     });
   } catch (error) {
     console.error('[PUT /maintenance/:id] Error:', error);
+    
+    if (error.message.includes('not found')) {
+      return res.status(404).json({
+        status: 'error',
+        message: error.message
+      });
+    }
+    
     res.status(500).json({
       status: 'error',
       message: 'Failed to update maintenance request',

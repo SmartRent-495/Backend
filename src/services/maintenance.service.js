@@ -5,11 +5,13 @@
  */
 
 const { getFirestoreService } = require('./firestore');
+const { getNotificationService } = require('./notifications.service');
 
 class MaintenanceService {
     constructor() {
         this.firestore = getFirestoreService();
         this.collection = 'maintenance';
+        this.notificationService = getNotificationService();
     }
 
     /**
@@ -38,7 +40,24 @@ class MaintenanceService {
                 updatedAt: new Date().toISOString()
             };
 
-            return await this.firestore.create(this.collection, request);
+            const result = await this.firestore.create(this.collection, request);
+
+            // notify landlord about new request
+            try {
+                await this.notificationService.create({
+                    userId: requestData.landlordId,
+                    type: 'maintenance_request',
+                    title: 'New Maintenance Request',
+                    message: `New ${requestData.priority} priority request: ${requestData.title}`,
+                    relatedId: result.id,
+                    relatedType: 'maintenance'
+                });
+            } catch (notifErr) {
+                console.error('Failed to create notification:', notifErr);
+                // don't fail the whole request if notification fails
+            }
+
+            return result;
         } catch (error) {
             console.error('Error creating maintenance request:', error);
             throw error;
@@ -144,10 +163,36 @@ class MaintenanceService {
      */
     async updateMaintenanceRequest(requestId, updateData) {
         try {
-            // Remove id from update data to prevent overwriting
-            const { id: _, ...dataToUpdate } = updateData;
+            // get original request to notify tenant if status changed
+            const original = await this.firestore.getById(this.collection, requestId);
             
-            return await this.firestore.update(this.collection, requestId, dataToUpdate);
+            const { id: _, ...dataToUpdate } = updateData;
+            const result = await this.firestore.update(this.collection, requestId, dataToUpdate);
+
+            // send notification if status changed
+            if (original && dataToUpdate.status && original.status !== dataToUpdate.status) {
+                try {
+                    let message = `Maintenance request status updated to ${dataToUpdate.status}`;
+                    if (dataToUpdate.status === 'completed') {
+                        message = 'Your maintenance request has been completed';
+                    } else if (dataToUpdate.status === 'in_progress') {
+                        message = 'Work has started on your maintenance request';
+                    }
+
+                    await this.notificationService.create({
+                        userId: original.tenantId,
+                        type: 'maintenance_update',
+                        title: 'Maintenance Request Updated',
+                        message,
+                        relatedId: requestId,
+                        relatedType: 'maintenance'
+                    });
+                } catch (notifErr) {
+                    console.error('Failed to send status notification:', notifErr);
+                }
+            }
+            
+            return result;
         } catch (error) {
             console.error('Error updating maintenance request:', error);
             throw error;

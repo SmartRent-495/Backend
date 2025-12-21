@@ -1,195 +1,168 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
+const { getNotificationService } = require('../services/notifications.service');
 
 // Get all notifications for current user
-router.get('/', authenticateToken, (req, res) => {
-    const { userId } = req.user;
-    const { is_read, type, limit = 50 } = req.query;
+router.get('/', authenticateToken, async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { is_read, type } = req.query;
 
-    let query = 'SELECT * FROM notifications WHERE user_id = ?';
-    const params = [userId];
-
-    // Filter by read status
-    if (is_read !== undefined) {
-        query += ' AND is_read = ?';
-        params.push(is_read === 'true' || is_read === '1' ? 1 : 0);
-    }
-
-    // Filter by type
-    if (type) {
-        query += ' AND type = ?';
-        params.push(type);
-    }
-
-    query += ' ORDER BY created_at DESC LIMIT ?';
-    params.push(parseInt(limit));
-
-    db.all(query, params, (err, notifications) => {
-        if (err) {
-            console.error('Error fetching notifications:', err);
-            return res.status(500).json({ error: 'Failed to fetch notifications' });
+        const filters = {};
+        if (is_read !== undefined) {
+            filters.isRead = is_read === 'true' || is_read === '1';
+        }
+        if (type) {
+            filters.type = type;
         }
 
-        res.json(notifications);
-    });
+        const notificationService = getNotificationService();
+        const notifications = await notificationService.getByUser(userId, filters);
+
+        res.json({ data: notifications });
+    } catch (err) {
+        console.error('Error fetching notifications:', err);
+        res.status(500).json({ error: 'Failed to fetch notifications' });
+    }
+});
+
+// Get unread count - MUST be before /:id route
+router.get('/unread/count', authenticateToken, async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const notificationService = getNotificationService();
+        const count = await notificationService.getUnreadCount(userId);
+        res.json({ unreadCount: count });
+    } catch (err) {
+        console.error('Error counting unread notifications:', err);
+        res.status(500).json({ error: 'Failed to count notifications' });
+    }
 });
 
 // Get notification by ID
-router.get('/:id', authenticateToken, (req, res) => {
-    const { userId } = req.user;
-    const { id } = req.params;
-
-    db.get(
-        'SELECT * FROM notifications WHERE id = ? AND user_id = ?',
-        [id, userId],
-        (err, notification) => {
-            if (err) {
-                console.error('Error fetching notification:', err);
-                return res.status(500).json({ error: 'Failed to fetch notification' });
-            }
-
-            if (!notification) {
-                return res.status(404).json({ error: 'Notification not found' });
-            }
-
-            res.json(notification);
+router.get('/:id', authenticateToken, async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { id } = req.params;
+        
+        const notificationService = getNotificationService();
+        const notification = await notificationService.getByUser(userId);
+        
+        const found = notification.find(n => n.id === id);
+        
+        if (!found) {
+            return res.status(404).json({ error: 'Notification not found' });
         }
-    );
-});
-
-// Get unread count
-router.get('/unread/count', authenticateToken, (req, res) => {
-    const { userId } = req.user;
-
-    db.get(
-        'SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0',
-        [userId],
-        (err, result) => {
-            if (err) {
-                console.error('Error counting unread notifications:', err);
-                return res.status(500).json({ error: 'Failed to count notifications' });
-            }
-
-            res.json({ unreadCount: result.count });
-        }
-    );
+        
+        res.json(found);
+    } catch (err) {
+        console.error('Error fetching notification:', err);
+        res.status(500).json({ error: 'Failed to fetch notification' });
+    }
 });
 
 // Mark notification as read
-router.put('/:id/read', authenticateToken, (req, res) => {
-    const { userId } = req.user;
-    const { id } = req.params;
-
-    db.run(
-        'UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?',
-        [id, userId],
-        function(err) {
-            if (err) {
-                console.error('Error marking notification as read:', err);
-                return res.status(500).json({ error: 'Failed to update notification' });
-            }
-
-            if (this.changes === 0) {
-                return res.status(404).json({ error: 'Notification not found' });
-            }
-
-            res.json({ message: 'Notification marked as read' });
+router.put('/:id/read', authenticateToken, async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { id } = req.params;
+        const notificationService = getNotificationService();
+        await notificationService.markAsRead(id, userId);
+        res.json({ message: 'Notification marked as read' });
+    } catch (err) {
+        if (err.message === 'Not found') {
+            return res.status(404).json({ error: 'Notification not found' });
         }
-    );
+        console.error('Error marking notification as read:', err);
+        res.status(500).json({ error: 'Failed to update notification' });
+    }
 });
 
 // Mark all notifications as read
-router.put('/mark-all/read', authenticateToken, (req, res) => {
-    const { userId } = req.user;
-
-    db.run(
-        'UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0',
-        [userId],
-        function(err) {
-            if (err) {
-                console.error('Error marking all notifications as read:', err);
-                return res.status(500).json({ error: 'Failed to update notifications' });
-            }
-
-            res.json({ 
-                message: 'All notifications marked as read',
-                updatedCount: this.changes
-            });
-        }
-    );
+router.put('/mark-all-read', authenticateToken, async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const notificationService = getNotificationService();
+        const count = await notificationService.markAllAsRead(userId);
+        res.json({ 
+            message: 'All notifications marked as read',
+            updatedCount: count
+        });
+    } catch (err) {
+        console.error('Error marking all notifications as read:', err);
+        res.status(500).json({ error: 'Failed to update notifications' });
+    }
 });
 
 // Delete notification
-router.delete('/:id', authenticateToken, (req, res) => {
-    const { userId } = req.user;
-    const { id } = req.params;
-
-    db.run(
-        'DELETE FROM notifications WHERE id = ? AND user_id = ?',
-        [id, userId],
-        function(err) {
-            if (err) {
-                console.error('Error deleting notification:', err);
-                return res.status(500).json({ error: 'Failed to delete notification' });
-            }
-
-            if (this.changes === 0) {
-                return res.status(404).json({ error: 'Notification not found' });
-            }
-
-            res.json({ message: 'Notification deleted successfully' });
+router.delete('/:id', authenticateToken, async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { id } = req.params;
+        const notificationService = getNotificationService();
+        await notificationService.delete(id, userId);
+        res.json({ message: 'Notification deleted successfully' });
+    } catch (err) {
+        if (err.message === 'Not found') {
+            return res.status(404).json({ error: 'Notification not found' });
         }
-    );
+        console.error('Error deleting notification:', err);
+        res.status(500).json({ error: 'Failed to delete notification' });
+    }
 });
 
 // Delete all read notifications
-router.delete('/read/clear', authenticateToken, (req, res) => {
-    const { userId } = req.user;
-
-    db.run(
-        'DELETE FROM notifications WHERE user_id = ? AND is_read = 1',
-        [userId],
-        function(err) {
-            if (err) {
-                console.error('Error clearing read notifications:', err);
-                return res.status(500).json({ error: 'Failed to clear notifications' });
-            }
-
-            res.json({ 
-                message: 'Read notifications cleared',
-                deletedCount: this.changes
-            });
+router.delete('/read/clear', authenticateToken, async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const notificationService = getNotificationService();
+        
+        const notifications = await notificationService.getByUser(userId, { isRead: true });
+        let deletedCount = 0;
+        
+        for (const notification of notifications) {
+            await notificationService.delete(notification.id, userId);
+            deletedCount++;
         }
-    );
+        
+        res.json({ 
+            message: 'Read notifications cleared',
+            deletedCount
+        });
+    } catch (err) {
+        console.error('Error clearing read notifications:', err);
+        res.status(500).json({ error: 'Failed to clear notifications' });
+    }
 });
 
 // Create notification (internal use - typically called by other routes)
-router.post('/', authenticateToken, (req, res) => {
-    const { user_id, type, title, message, related_id, related_type } = req.body;
+router.post('/', authenticateToken, async (req, res) => {
+    try {
+        const { user_id, type, title, message, related_id, related_type } = req.body;
 
-    // Validation
-    if (!user_id || !type || !title || !message) {
-        return res.status(400).json({ error: 'Missing required fields' });
-    }
-
-    const query = `
-        INSERT INTO notifications (user_id, type, title, message, related_id, related_type)
-        VALUES (?, ?, ?, ?, ?, ?)
-    `;
-
-    db.run(query, [user_id, type, title, message, related_id || null, related_type || null], function(err) {
-        if (err) {
-            console.error('Error creating notification:', err);
-            return res.status(500).json({ error: 'Failed to create notification' });
+        if (!user_id || !type || !title || !message) {
+            return res.status(400).json({ error: 'Missing required fields' });
         }
+
+        const notificationService = getNotificationService();
+        const notification = await notificationService.create({
+            userId: user_id,
+            type,
+            title,
+            message,
+            relatedId: related_id,
+            relatedType: related_type
+        });
 
         res.status(201).json({
             message: 'Notification created successfully',
-            notificationId: this.lastID
+            notificationId: notification.id
         });
-    });
+    } catch (err) {
+        console.error('Error creating notification:', err);
+        res.status(500).json({ error: 'Failed to create notification' });
+    }
 });
 
 module.exports = router;
