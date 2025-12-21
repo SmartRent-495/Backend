@@ -28,14 +28,26 @@ if (config.nodeEnv === 'development') {
     app.use(morgan('dev'));
 }
 
-// Register /api/payments BEFORE body parsing (for Stripe webhook)
-app.use('/api/payments', require('./routes/payments'));
+// ============================================
+// ⚠️ CRITICAL: Stripe Webhook BEFORE express.json()
+// ============================================
+// The webhook needs RAW body to verify Stripe signature
+const paymentsRouter = require('./routes/payments');
+app.use('/api/payments/webhook', express.raw({ type: 'application/json' }), paymentsRouter);
 
-// Body parsing for all other routes
+// ============================================
+// Body parsing for ALL OTHER routes
+// ============================================
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Register all other API routes AFTER body parsing
+// ============================================
+// Register API routes (AFTER body parsing)
+// ============================================
+
+// Payment routes (all except webhook)
+app.use('/api/payments', paymentsRouter);
+
 // Authentication routes
 app.use('/api/auth', require('./routes/auth'));
 
@@ -53,9 +65,6 @@ app.use('/api/leases', require('./routes/leases'));
 app.use('/api/maintenance', require('./routes/maintenance'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/landlords', require('./routes/landlords'));
-
-// Legacy fitness routes (removed)
-// Admin routes (removed)
 
 // Serve uploaded files statically (avatars, property images, maintenance images)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
@@ -79,4 +88,4 @@ app.use((req, res) => {
     });
 });
 
-module.exports = app; 
+module.exports = app;
