@@ -36,7 +36,6 @@ router.get('/tenant', authenticateToken, async (req, res) => {
   }
 });
 
-
 // LANDLORD: Get all payments for their properties
 router.get('/landlord', authenticateToken, async (req, res) => {
   try {
@@ -49,6 +48,39 @@ router.get('/landlord', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('❌ Get landlord payments error:', err);
     res.status(500).json({ error: 'Failed to fetch payments' });
+  }
+});
+
+// Get single payment by ID
+router.get('/:paymentId', authenticateToken, async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+    const userId = req.user.userId;
+    const paymentService = getPaymentService();
+
+    const payment = await paymentService.getById(paymentId);
+    
+    if (!payment) {
+      return res.status(404).json({ error: 'Payment not found' });
+    }
+
+    if (payment.tenantId !== userId && payment.landlordId !== userId) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    if (payment.stripePaymentIntentId) {
+      try {
+        const paymentIntent = await stripe.paymentIntents.retrieve(payment.stripePaymentIntentId);
+        payment.clientSecret = paymentIntent.client_secret;
+      } catch (err) {
+        console.warn('Could not retrieve payment intent:', err.message);
+      }
+    }
+
+    res.json(payment);
+  } catch (err) {
+    console.error('Get payment error:', err);
+    res.status(500).json({ error: 'Failed to fetch payment' });
   }
 });
 
@@ -139,7 +171,20 @@ router.post('/create', authenticateToken, async (req, res) => {
       });
     }
 
-    // Check for duplicate payment (same tenant, property, period)
+    const leaseSnap = await db.collection('leases')
+      .where('landlordId', '==', landlordId)
+      .where('tenantId', '==', tenantId)
+      .where('propertyId', '==', propertyId)
+      .where('status', '==', 'active')
+      .limit(1)
+      .get();
+    
+    if (leaseSnap.empty) {
+      return res.status(400).json({ 
+        error: 'No active lease found for this tenant and property. Please approve their application first.' 
+      });
+    }
+
     const paymentService = getPaymentService();
     const existingSnap = await db.collection('payments')
       .where('landlordId', '==', landlordId)
@@ -172,6 +217,24 @@ router.post('/create', authenticateToken, async (req, res) => {
     });
 
     console.log('✅ Payment request created:', payment.id);
+
+    try {
+      const { getNotificationService } = require('../services/notifications.service');
+      const notificationService = getNotificationService();
+      
+      await notificationService.create({
+        userId: tenantId,
+        type: 'payment',
+        title: 'New Payment Request',
+        message: `You have a new payment request of $${totalAmount} for ${period}.`,
+        relatedId: payment.id,
+        relatedType: 'payment'
+      });
+      
+      console.log(`📧 Payment request notification sent to tenant ${tenantId}`);
+    } catch (notifErr) {
+      console.error('Failed to send notification:', notifErr.message);
+    }
 
     res.json({ 
       paymentId: payment.id,
@@ -216,17 +279,21 @@ router.post('/pay/:paymentId', authenticateToken, async (req, res) => {
 
     // If PaymentIntent already exists, return it
     if (payment.stripePaymentIntentId) {
-      const existingIntent = await stripe.paymentIntents.retrieve(payment.stripePaymentIntentId);
-      
-      if (existingIntent.status === 'succeeded') {
-        return res.status(400).json({ error: 'Payment already completed' });
-      }
+      try {
+        const existingIntent = await stripe.paymentIntents.retrieve(payment.stripePaymentIntentId);
+        
+        if (existingIntent.status === 'succeeded') {
+          return res.status(400).json({ error: 'Payment already completed' });
+        }
 
-      if (existingIntent.status !== 'canceled') {
-        return res.json({ 
-          clientSecret: existingIntent.client_secret,
-          paymentIntentId: existingIntent.id
-        });
+        if (existingIntent.status !== 'canceled' && existingIntent.status !== 'requires_payment_method') {
+          return res.json({ 
+            clientSecret: existingIntent.client_secret,
+            paymentIntentId: existingIntent.id
+          });
+        }
+      } catch (err) {
+        console.warn('Could not retrieve existing payment intent:', err.message);
       }
     }
 
@@ -272,6 +339,7 @@ router.post('/pay/:paymentId', authenticateToken, async (req, res) => {
 // Sync payment status with Stripe
 router.post('/sync/:paymentId', authenticateToken, async (req, res) => {
   try {
+    console.log(`🔄 SYNC ENDPOINT CALLED for payment ${req.params.paymentId} by user ${req.user.userId}`);
     const { paymentId } = req.params;
     const userId = req.user.userId;
     const paymentService = getPaymentService();
@@ -279,16 +347,19 @@ router.post('/sync/:paymentId', authenticateToken, async (req, res) => {
     const payment = await paymentService.getById(paymentId);
     
     if (!payment) {
+      console.error(`❌ Payment ${paymentId} not found`);
       return res.status(404).json({ error: 'Payment not found' });
     }
 
     // Authorization check
     if (payment.tenantId !== userId && payment.landlordId !== userId) {
+      console.error(`❌ User ${userId} unauthorized for payment ${paymentId}`);
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
     // Get status from Stripe
     if (!payment.stripePaymentIntentId) {
+      console.error(`❌ No Stripe payment intent for payment ${paymentId}`);
       return res.status(400).json({ error: 'No Stripe payment intent found' });
     }
 
@@ -309,6 +380,33 @@ router.post('/sync/:paymentId', authenticateToken, async (req, res) => {
         stripeChargeId: stripeChargeId,
       });
       console.log(`✅ Synced payment ${paymentId} to 'paid'`);
+      
+      try {
+        const { getNotificationService } = require('../services/notifications.service');
+        const notificationService = getNotificationService();
+        
+        await notificationService.create({
+          userId: payment.tenantId,
+          type: 'payment',
+          title: 'Payment Successful',
+          message: `Your payment of $${payment.totalAmount} for ${payment.period} has been processed successfully.`,
+          relatedId: paymentId,
+          relatedType: 'payment'
+        });
+        
+        await notificationService.create({
+          userId: payment.landlordId,
+          type: 'payment',
+          title: 'Payment Received',
+          message: `Received payment of $${payment.totalAmount} for ${payment.period}.`,
+          relatedId: paymentId,
+          relatedType: 'payment'
+        });
+        
+        console.log(`📧 Notifications sent for payment ${paymentId}`);
+      } catch (notifErr) {
+        console.error('Failed to send notifications:', notifErr.message);
+      }
       
       return res.json({ 
         message: 'Payment synced successfully',
@@ -432,6 +530,37 @@ router.post('/webhook', async (req, res) => {
         });
 
         console.log(`✅ Payment ${paymentId} succeeded`);
+        
+        // Get payment details for notifications
+        const payment = await paymentService.getById(paymentId);
+        
+        if (payment) {
+          const { getNotificationService } = require('../services/notifications.service');
+          const notificationService = getNotificationService();
+          
+          // Notify tenant
+          await notificationService.create({
+            userId: payment.tenantId,
+            type: 'payment',
+            title: 'Payment Successful',
+            message: `Your payment of $${payment.totalAmount} for ${payment.period} has been processed successfully.`,
+            relatedId: paymentId,
+            relatedType: 'payment'
+          });
+          
+          // Notify landlord
+          await notificationService.create({
+            userId: payment.landlordId,
+            type: 'payment',
+            title: 'Payment Received',
+            message: `Received payment of $${payment.totalAmount} for ${payment.period}.`,
+            relatedId: paymentId,
+            relatedType: 'payment'
+          });
+          
+          console.log(`📧 Notifications sent for payment ${paymentId}`);
+        }
+        
         break;
 
       case 'payment_intent.payment_failed':
@@ -441,6 +570,26 @@ router.post('/webhook', async (req, res) => {
         await paymentService.updateStatus(failedPaymentId, 'failed');
 
         console.log(`❌ Payment ${failedPaymentId} failed`);
+        
+        // Notify tenant about failed payment
+        const failedPayment = await paymentService.getById(failedPaymentId);
+        
+        if (failedPayment) {
+          const { getNotificationService } = require('../services/notifications.service');
+          const notificationService = getNotificationService();
+          
+          await notificationService.create({
+            userId: failedPayment.tenantId,
+            type: 'payment',
+            title: 'Payment Failed',
+            message: `Your payment of $${failedPayment.totalAmount} for ${failedPayment.period} could not be processed. Please try again.`,
+            relatedId: failedPaymentId,
+            relatedType: 'payment'
+          });
+          
+          console.log(`📧 Failure notification sent for payment ${failedPaymentId}`);
+        }
+        
         break;
 
       default:

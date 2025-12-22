@@ -81,42 +81,106 @@ class PaymentService {
    * Get all payments for a tenant (payments they need to pay)
    */
   async getByTenant(tenantId) {
-    const snap = await this.db
-      .collection(this.collection)
-      .where('tenantId', '==', tenantId)
-      .orderBy('createdAt', 'desc')
-      .get();
+    try {
+      const snap = await this.db
+        .collection(this.collection)
+        .where('tenantId', '==', tenantId)
+        .get();
 
-    const payments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    return this.enrichPayments(payments);
+      const payments = snap.docs.map(d => {
+        const data = d.data();
+        return { 
+          id: d.id, 
+          ...data,
+          createdAt: data.createdAt?.toDate?.() || data.createdAt,
+          paidAt: data.paidAt?.toDate?.() || data.paidAt
+        };
+      });
+      
+      // Sort in memory
+      payments.sort((a, b) => {
+        const aTime = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime();
+        const bTime = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime();
+        return bTime - aTime;
+      });
+      
+      return this.enrichPayments(payments);
+    } catch (error) {
+      console.error('[PaymentService] Error getting tenant payments:', error);
+      throw error;
+    }
   }
 
   /**
    * Get all payments for a landlord (payment requests they created)
    */
   async getByLandlord(landlordId) {
-    const snap = await this.db
-      .collection(this.collection)
-      .where('landlordId', '==', landlordId)
-      .orderBy('createdAt', 'desc')
-      .get();
+    try {
+      console.log(`[PaymentService] Fetching payments for landlord: ${landlordId}`);
+      
+      const snap = await this.db
+        .collection(this.collection)
+        .where('landlordId', '==', landlordId)
+        .get();
 
-    const payments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    return this.enrichPayments(payments);
+      console.log(`[PaymentService] Found ${snap.size} payments`);
+
+      const payments = snap.docs.map(d => {
+        const data = d.data();
+        return { 
+          id: d.id, 
+          ...data,
+          createdAt: data.createdAt?.toDate?.() || data.createdAt,
+          paidAt: data.paidAt?.toDate?.() || data.paidAt
+        };
+      });
+      
+      // Sort in memory
+      payments.sort((a, b) => {
+        const aTime = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime();
+        const bTime = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime();
+        return bTime - aTime;
+      });
+      
+      return this.enrichPayments(payments);
+    } catch (error) {
+      console.error('[PaymentService] Error getting landlord payments:', error);
+      throw error;
+    }
   }
 
   /**
    * Get payments by lease (optional - if you still want to filter by lease)
    */
   async getByLease(leaseId) {
-    const snap = await this.db
-      .collection(this.collection)
-      .where('leaseId', '==', leaseId)
-      .orderBy('createdAt', 'desc')
-      .get();
+    try {
+      const snap = await this.db
+        .collection(this.collection)
+        .where('leaseId', '==', leaseId)
+        .get();
 
-    const payments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    return this.enrichPayments(payments);
+      const payments = snap.docs.map(d => {
+        const data = d.data();
+        return { 
+          id: d.id, 
+          ...data,
+          createdAt: data.createdAt?.toDate?.() || data.createdAt,
+          paidAt: data.paidAt?.toDate?.() || data.paidAt
+        };
+      });
+      
+      // Sort in memory
+      payments.sort((a, b) => {
+        const aTime = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime();
+        const bTime = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime();
+        return bTime - aTime;
+      });
+      
+      return this.enrichPayments(payments);
+    } catch (error) {
+      console.error('[PaymentService] Error getting lease payments:', error);
+      throw error;
+    }
   }
 
   /**

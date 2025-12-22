@@ -65,6 +65,7 @@ app.use('/api/leases', require('./routes/leases'));
 app.use('/api/maintenance', require('./routes/maintenance'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/landlords', require('./routes/landlords'));
+app.use('/api/applications', require('./routes/applications'));
 
 // Serve uploaded files statically (avatars, property images, maintenance images)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
