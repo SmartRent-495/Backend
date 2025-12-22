@@ -7,7 +7,7 @@ class PaymentService {
   }
 
   /**
-   * Create a new payment record
+   * Create a new payment request (by landlord)
    */
   async create(paymentData) {
     const paymentRef = this.db.collection(this.collection).doc();
@@ -35,7 +35,7 @@ class PaymentService {
   }
 
   /**
-   * Enrich payment with tenant, property, and lease information
+   * Enrich payment with tenant, property information
    */
   async enrichPayment(payment) {
     try {
@@ -51,36 +51,22 @@ class PaymentService {
         }
       }
 
-      // Fetch lease information (to get property details)
-      if (payment.leaseId) {
-        const leaseDoc = await this.db.collection('leases').doc(payment.leaseId).get();
-        if (leaseDoc.exists) {
-          const leaseData = leaseDoc.data();
-          enriched.leaseInfo = {
-            startDate: leaseData.startDate,
-            endDate: leaseData.endDate,
-            status: leaseData.status
-          };
-
-          // Fetch property information
-          if (leaseData.propertyId || payment.propertyId) {
-            const propertyId = leaseData.propertyId || payment.propertyId;
-            const propertyDoc = await this.db.collection('properties').doc(propertyId).get();
-            if (propertyDoc.exists) {
-              const propertyData = propertyDoc.data();
-              enriched.propertyTitle = propertyData.title;
-              enriched.propertyAddress = propertyData.address;
-              enriched.propertyCity = propertyData.city;
-              enriched.propertyState = propertyData.state;
-            }
-          }
+      // Fetch property information
+      if (payment.propertyId) {
+        const propertyDoc = await this.db.collection('properties').doc(payment.propertyId).get();
+        if (propertyDoc.exists) {
+          const propertyData = propertyDoc.data();
+          enriched.propertyTitle = propertyData.title;
+          enriched.propertyAddress = propertyData.address;
+          enriched.propertyCity = propertyData.city;
+          enriched.propertyState = propertyData.state;
         }
       }
 
       return enriched;
     } catch (error) {
       console.error('Error enriching payment:', error);
-      return payment; // Return original payment if enrichment fails
+      return payment;
     }
   }
 
@@ -92,7 +78,7 @@ class PaymentService {
   }
 
   /**
-   * Get all payments for a tenant
+   * Get all payments for a tenant (payments they need to pay)
    */
   async getByTenant(tenantId) {
     const snap = await this.db
@@ -106,7 +92,7 @@ class PaymentService {
   }
 
   /**
-   * Get all payments for a landlord (enriched with tenant & property info)
+   * Get all payments for a landlord (payment requests they created)
    */
   async getByLandlord(landlordId) {
     const snap = await this.db
@@ -120,7 +106,7 @@ class PaymentService {
   }
 
   /**
-   * Get payments by lease
+   * Get payments by lease (optional - if you still want to filter by lease)
    */
   async getByLease(leaseId) {
     const snap = await this.db
@@ -134,12 +120,13 @@ class PaymentService {
   }
 
   /**
-   * Check if payment exists for a specific period
+   * Check if payment exists for a specific period (for a tenant/property combo)
    */
-  async existsForPeriod(leaseId, period) {
+  async existsForPeriod(tenantId, propertyId, period) {
     const snap = await this.db
       .collection(this.collection)
-      .where('leaseId', '==', leaseId)
+      .where('tenantId', '==', tenantId)
+      .where('propertyId', '==', propertyId)
       .where('period', '==', period)
       .where('status', 'in', ['pending', 'paid'])
       .limit(1)
@@ -188,10 +175,10 @@ class PaymentService {
       failed: payments.filter(p => p.status === 'failed').length,
       totalRevenue: payments
         .filter(p => p.status === 'paid')
-        .reduce((sum, p) => sum + p.amount, 0),
+        .reduce((sum, p) => sum + p.totalAmount, 0),
       pendingAmount: payments
         .filter(p => p.status === 'pending')
-        .reduce((sum, p) => sum + p.amount, 0),
+        .reduce((sum, p) => sum + p.totalAmount, 0),
       thisMonthRevenue: payments
         .filter(p => {
           if (p.status !== 'paid' || !p.paidAt) return false;
@@ -200,7 +187,7 @@ class PaymentService {
           return paidDate.getMonth() === now.getMonth() && 
                  paidDate.getFullYear() === now.getFullYear();
         })
-        .reduce((sum, p) => sum + p.amount, 0),
+        .reduce((sum, p) => sum + p.totalAmount, 0),
     };
 
     return stats;
