@@ -72,8 +72,14 @@ router.get('/:paymentId', authenticateToken, async (req, res) => {
       try {
         const paymentIntent = await stripe.paymentIntents.retrieve(payment.stripePaymentIntentId);
         payment.clientSecret = paymentIntent.client_secret;
+        console.log(`✅ Retrieved PaymentIntent for ${paymentId}:`, {
+          id: paymentIntent.id,
+          status: paymentIntent.status,
+          hasSecret: !!paymentIntent.client_secret,
+          secretPrefix: paymentIntent.client_secret?.substring(0, 20)
+        });
       } catch (err) {
-        console.warn('Could not retrieve payment intent:', err.message);
+        console.error('❌ Could not retrieve payment intent:', err.message);
       }
     }
 
