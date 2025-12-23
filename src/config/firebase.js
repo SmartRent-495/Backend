@@ -24,21 +24,27 @@ const initializeFirebase = () => {
             
             let serviceAccount;
             
-            // Try to get service account from environment variable first
-            if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-                console.log('📝 Using service account from environment variable');
+            // In production (Render), use environment variables
+            if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+                console.log('📝 Using Firebase credentials from environment variables (production mode)');
+                serviceAccount = {
+                    type: 'service_account',
+                    project_id: process.env.FIREBASE_PROJECT_ID,
+                    private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+                    client_email: process.env.FIREBASE_CLIENT_EMAIL,
+                };
+            } else if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+                console.log('📝 Using service account from FIREBASE_SERVICE_ACCOUNT variable');
                 serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
             } else {
-                // Try to load from file
+                // Development: Try to load from file
                 try {
                     const serviceAccountPath = path.join(__dirname, '../../firebase-service-account.json');
-                    console.log('📝 Loading service account from:', serviceAccountPath);
+                    console.log('📝 Loading service account from file (development mode):', serviceAccountPath);
                     serviceAccount = require(serviceAccountPath);
                 } catch (fileError) {
-                    // Try alternative path
-                    const altPath = path.join(__dirname, '../firebase-service-account.json');
-                    console.log('📝 Trying alternative path:', altPath);
-                    serviceAccount = require(altPath);
+                    console.error('❌ Could not load Firebase credentials from file or environment variables');
+                    throw new Error('Firebase credentials not found. Please set FIREBASE_PRIVATE_KEY and FIREBASE_CLIENT_EMAIL environment variables.');
                 }
             }
 
