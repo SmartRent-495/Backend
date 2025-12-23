@@ -68,22 +68,29 @@ router.get('/:paymentId', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
+    // Build response object
+    const response = { ...payment };
+    
+    // Remove any incorrect clientSecret from DB
+    delete response.clientSecret;
+
+    // Fetch fresh clientSecret from Stripe if PaymentIntent exists
     if (payment.stripePaymentIntentId) {
       try {
         const paymentIntent = await stripe.paymentIntents.retrieve(payment.stripePaymentIntentId);
-        payment.clientSecret = paymentIntent.client_secret;
+        response.clientSecret = paymentIntent.client_secret;
         console.log(`✅ Retrieved PaymentIntent for ${paymentId}:`, {
           id: paymentIntent.id,
           status: paymentIntent.status,
           hasSecret: !!paymentIntent.client_secret,
-          secretPrefix: paymentIntent.client_secret?.substring(0, 20)
+          secretLength: paymentIntent.client_secret?.length
         });
       } catch (err) {
         console.error('❌ Could not retrieve payment intent:', err.message);
       }
     }
 
-    res.json(payment);
+    res.json(response);
   } catch (err) {
     console.error('Get payment error:', err);
     res.status(500).json({ error: 'Failed to fetch payment' });
