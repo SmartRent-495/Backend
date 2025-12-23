@@ -137,4 +137,48 @@ router.delete('/collection/:name/:id', authenticateToken, requireAdmin, async (r
   }
 });
 
+
+/**
+ * Edit /api/admin/collection/:name/:id
+ * Edit a doc by id.
+ */
+router.patch('/collection/:name/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const name = req.params.name;
+    const id = req.params.id;
+
+    if (!ALLOWED_COLLECTIONS.has(name)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid collection name' });
+    }
+    if (!id) {
+      return res.status(400).json({ status: 'error', message: 'Document id required' });
+    }
+
+    const payload = req.body;
+    if (!payload || typeof payload !== 'object') {
+      return res.status(400).json({ status: 'error', message: 'JSON body is required' });
+    }
+
+    if (payload.id) delete payload.id;
+
+    const now = new Date().toISOString();
+    const updateDoc = {
+      ...payload,
+      updatedAt: now,
+      updatedBy: req.user.email || req.user.userId,
+    };
+
+    const ref = admin.firestore().collection(name).doc(id);
+    await ref.set(updateDoc, { merge: true });
+
+    const snap = await ref.get();
+    const updated = snap.exists ? { id: snap.id, ...snap.data() } : { id, ...updateDoc };
+
+    return res.json({ status: 'success', data: updated });
+  } catch (error) {
+    console.error('[Admin patch] error:', error);
+    return res.status(500).json({ status: 'error', message: 'Server error' });
+  }
+});
+
 module.exports = router;
