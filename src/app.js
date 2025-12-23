@@ -19,7 +19,8 @@ app.use(cors(config.corsOptions));
 // Rate limiting
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100 // limit each IP to 100 requests per windowMs
+    max: 500, // limit each IP to 500 requests per windowMs
+    message: 'Too many requests from this IP, please try again later.'
 });
 app.use('/api/', limiter);
 
@@ -69,6 +70,16 @@ app.use('/api/applications', require('./routes/applications'));
 
 // Serve uploaded files statically (avatars, property images, maintenance images)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.status(200).json({ 
+        status: 'success',
+        message: 'Server is running',
+        timestamp: new Date().toISOString(),
+        environment: config.nodeEnv
+    });
+});
 
 // Error handling middleware
 app.use((err, req, res, next) => {
