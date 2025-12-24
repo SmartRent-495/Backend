@@ -70,23 +70,84 @@ router.get('/:paymentId', authenticateToken, async (req, res) => {
 
     // Build response object
     const response = { ...payment };
-    
+
     // Remove any incorrect clientSecret from DB
     delete response.clientSecret;
 
-    // Fetch fresh clientSecret from Stripe if PaymentIntent exists
+    // Fetch fresh PaymentIntent from Stripe if one is associated
     if (payment.stripePaymentIntentId) {
       try {
         const paymentIntent = await stripe.paymentIntents.retrieve(payment.stripePaymentIntentId);
-        response.clientSecret = paymentIntent.client_secret;
+
         console.log(`✅ Retrieved PaymentIntent for ${paymentId}:`, {
           id: paymentIntent.id,
           status: paymentIntent.status,
           hasSecret: !!paymentIntent.client_secret,
           secretLength: paymentIntent.client_secret?.length
         });
+
+        // If the PaymentIntent is already completed, update our DB and do NOT return a client_secret
+        if (paymentIntent.status === 'succeeded') {
+          if (payment.status !== 'paid') {
+            // Update DB status to paid and capture charge id if present
+            let stripeChargeId = null;
+            if (paymentIntent.charges && paymentIntent.charges.data && paymentIntent.charges.data.length > 0) {
+              stripeChargeId = paymentIntent.charges.data[0].id;
+            }
+
+            try {
+              await paymentService.updateStatus(paymentId, 'paid', { stripeChargeId });
+              console.log(`🔁 Updated payment ${paymentId} to 'paid' based on Stripe intent status`);
+
+              // Send notifications similar to sync flow
+              try {
+                const { getNotificationService } = require('../services/notifications.service');
+                const notificationService = getNotificationService();
+
+                await notificationService.create({
+                  userId: payment.tenantId,
+                  type: 'payment',
+                  title: 'Payment Successful',
+                  message: `Your payment of $${payment.totalAmount} for ${payment.period} has been processed successfully.`,
+                  relatedId: paymentId,
+                  relatedType: 'payment'
+                });
+
+                await notificationService.create({
+                  userId: payment.landlordId,
+                  type: 'payment',
+                  title: 'Payment Received',
+                  message: `Received payment of $${payment.totalAmount} for ${payment.period}.`,
+                  relatedId: paymentId,
+                  relatedType: 'payment'
+                });
+
+                console.log(`📧 Notifications sent for payment ${paymentId}`);
+              } catch (notifErr) {
+                console.error('Failed to send notifications after marking paid:', notifErr.message || notifErr);
+              }
+            } catch (uErr) {
+              console.error('Failed to update payment status after Stripe succeeded:', uErr.message || uErr);
+            }
+          }
+
+          // Do not return a clientSecret for terminal intents
+        } else if (paymentIntent.status === 'canceled') {
+          // Map canceled -> failed in our DB if necessary
+          if (payment.status !== 'failed') {
+            try {
+              await paymentService.updateStatus(paymentId, 'failed');
+              console.log(`🔁 Updated payment ${paymentId} to 'failed' (Stripe canceled)`);
+            } catch (uErr) {
+              console.error('Failed to update payment status after Stripe canceled:', uErr.message || uErr);
+            }
+          }
+        } else {
+          // For actionable intents, return the client_secret
+          response.clientSecret = paymentIntent.client_secret;
+        }
       } catch (err) {
-        console.error('❌ Could not retrieve payment intent:', err.message);
+        console.error('❌ Could not retrieve payment intent:', err.message || err);
       }
     }
 
