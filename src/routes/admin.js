@@ -4,6 +4,16 @@ const router = express.Router();
 const { authenticateToken } = require('../middleware/auth');
 const { admin } = require('../config/firebase');
 
+// ✅ Define once, use everywhere
+const ALLOWED_COLLECTIONS = new Set([
+  'users',
+  'properties',
+  'leases',
+  'maintenance',
+  'notifications',
+  'payments',
+]);
+
 function requireAdmin(req, res, next) {
   if (!req.user || req.user.role !== 'admin') {
     return res.status(403).json({ status: 'error', message: 'Admin role required' });
@@ -18,7 +28,6 @@ async function readCollection(name) {
 
 /**
  * GET /api/admin/overview
- * Returns all major data for admin dashboard.
  */
 router.get('/overview', authenticateToken, requireAdmin, async (req, res) => {
   try {
@@ -28,7 +37,6 @@ router.get('/overview', authenticateToken, requireAdmin, async (req, res) => {
     const maintenance = await readCollection('maintenance');
     const notifications = await readCollection('notifications');
     const payments = await readCollection('payments');
-
 
     const landlords = users.filter((u) => u.role === 'landlord');
     const tenants = users.filter((u) => u.role === 'tenant');
@@ -56,14 +64,12 @@ router.get('/overview', authenticateToken, requireAdmin, async (req, res) => {
 
 /**
  * GET /api/admin/collection/:name
- * Example: /api/admin/collection/users
  */
 router.get('/collection/:name', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const name = req.params.name;
 
-    const allowed = new Set(['users', 'properties', 'leases', 'maintenance', 'notifications', 'payments']);
-    if (!allowed.has(name)) {
+    if (!ALLOWED_COLLECTIONS.has(name)) {
       return res.status(400).json({ status: 'error', message: 'Invalid collection name' });
     }
 
@@ -75,12 +81,15 @@ router.get('/collection/:name', authenticateToken, requireAdmin, async (req, res
   }
 });
 
+/**
+ * POST /api/admin/collection/:name
+ * Creates a new document (auto-id)
+ */
 router.post('/collection/:name', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const name = req.params.name;
 
-    const allowed = new Set(['users', 'properties', 'leases', 'maintenance', 'notifications', 'payments']);
-    if (!allowed.has(name)) {
+    if (!ALLOWED_COLLECTIONS.has(name)) {
       return res.status(400).json({ status: 'error', message: 'Invalid collection name' });
     }
 
@@ -93,11 +102,10 @@ router.post('/collection/:name', authenticateToken, requireAdmin, async (req, re
 
     const doc = {
       ...payload,
-      createdAt: payload.createdAt || now,
+      createdAt: payload.createdAt || now, // keep if caller sent it
       updatedAt: now,
       updatedBy: req.user.email || req.user.userId,
     };
-
 
     const ref = await admin.firestore().collection(name).add(doc);
 
@@ -112,35 +120,8 @@ router.post('/collection/:name', authenticateToken, requireAdmin, async (req, re
 });
 
 /**
- * DELETE /api/admin/collection/:name/:id
- * Deletes a doc by id.
- */
-router.delete('/collection/:name/:id', authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const name = req.params.name;
-    const id = req.params.id;
-
-    const allowed = new Set(['users', 'properties', 'leases', 'maintenance', 'notifications', 'payments']);
-    if (!allowed.has(name)) {
-      return res.status(400).json({ status: 'error', message: 'Invalid collection name' });
-    }
-    if (!id) {
-      return res.status(400).json({ status: 'error', message: 'Document id required' });
-    }
-
-    await admin.firestore().collection(name).doc(id).delete();
-
-    return res.json({ status: 'success', message: 'Deleted' });
-  } catch (error) {
-    console.error('[Admin delete] error:', error);
-    return res.status(500).json({ status: 'error', message: 'Server error' });
-  }
-});
-
-
-/**
- * Edit /api/admin/collection/:name/:id
- * Edit a doc by id.
+ * PATCH /api/admin/collection/:name/:id
+ * Updates fields on a document (merge)
  */
 router.patch('/collection/:name/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
@@ -159,11 +140,12 @@ router.patch('/collection/:name/:id', authenticateToken, requireAdmin, async (re
       return res.status(400).json({ status: 'error', message: 'JSON body is required' });
     }
 
-    if (payload.id) delete payload.id;
+    // Don't allow overwriting id fields
+    const { id: _ignoreId, ...rest } = payload;
 
     const now = new Date().toISOString();
     const updateDoc = {
-      ...payload,
+      ...rest,
       updatedAt: now,
       updatedBy: req.user.email || req.user.userId,
     };
@@ -177,6 +159,30 @@ router.patch('/collection/:name/:id', authenticateToken, requireAdmin, async (re
     return res.json({ status: 'success', data: updated });
   } catch (error) {
     console.error('[Admin patch] error:', error);
+    return res.status(500).json({ status: 'error', message: 'Server error', details: error.message });
+  }
+});
+
+/**
+ * DELETE /api/admin/collection/:name/:id
+ */
+router.delete('/collection/:name/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const name = req.params.name;
+    const id = req.params.id;
+
+    if (!ALLOWED_COLLECTIONS.has(name)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid collection name' });
+    }
+    if (!id) {
+      return res.status(400).json({ status: 'error', message: 'Document id required' });
+    }
+
+    await admin.firestore().collection(name).doc(id).delete();
+
+    return res.json({ status: 'success', message: 'Deleted' });
+  } catch (error) {
+    console.error('[Admin delete] error:', error);
     return res.status(500).json({ status: 'error', message: 'Server error' });
   }
 });
