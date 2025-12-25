@@ -340,7 +340,7 @@ This project is licensed under the MIT License.
 4. [Vercel Documentation](https://vercel.com/docs)
 5. [Render Cloud Hosting](https://render.com/docs)
 6. [Stripe API Reference](https://stripe.com/docs/api)
-
+```
 ---
 
 ## Contact Details
