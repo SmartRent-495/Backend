@@ -15,6 +15,9 @@ initializeFirebase();
 // Security middleware
 app.use(helmet());
 app.use(cors(config.corsOptions));
+// preflight (OPTIONS) is handled for PATCH/DELETE
+app.options('*', cors(config.corsOptions));
+
 
 // Rate limiting
 const limiter = rateLimit({
