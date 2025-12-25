@@ -183,7 +183,7 @@ router.delete('/collection/:name/:id', authenticateToken, requireAdmin, async (r
     return res.json({ status: 'success', message: 'Deleted' });
   } catch (error) {
     console.error('[Admin delete] error:', error);
-    return res.status(500).json({ status: 'error', message: 'Server error' });
+    return res.status(500).json({ status: 'error', message: 'Server Error' });
   }
 });
 
