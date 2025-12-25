@@ -1,148 +1,241 @@
-# SmartRent - Property Management & Rental Platform
+# SmartRent Backend
 
-A cloud-based property management system that unifies landlords and tenants under one integrated platform.
+Express.js REST API server for the SmartRent property management platform. Handles authentication, payments, property management, and integrates with Firebase and Stripe.
 
-## 🏢 Project Overview
+## Prerequisites
 
-SmartRent is a comprehensive web-based property and rental management system built for CNG 495 - Cloud Computing (Fall 2025). The platform streamlines rental property management by providing secure, efficient tools for both landlords and tenants.
+- Node.js v18 or higher
+- npm
+- SQLite3 (for local development)
+- Firebase project (for production)
+- Stripe account (for payments)
 
-## 👥 Team Members
+## Quick Start
 
-- **Mahlet Bekele** -  (Frontend Development)
-- **Zeeshan Imran** -  (API Development & Integration)
-- **Miguel Tunga Mbabazi** -  (Database Setup & Management)
-
-## ✨ Features
-
-### For Tenants
-- 🔐 Secure login and authentication
-- 💳 Online rent and utility payments
-- 🏠 View property details and lease information
-- 🔧 Submit and track maintenance requests
-- 🔔 Payment reminders and notifications
-- 📊 Payment history tracking
-
-### For Landlords
-- 🏘️ Manage multiple properties
-- 👥 Tenant management and lease tracking
-- 💰 Track rent payments in real-time
-- 🛠️ View and update maintenance requests
-- 📈 Financial reporting and analytics
-- 🔔 Automated rent reminders
-- 📧 Tenant communication tools
-
-## 🛠️ Tech Stack
-
-### Backend
-- **Runtime**: Node.js with Express.js
-- **Database**: 
-  - **Development**: SQLite3 (local file-based)
-  - **Production**: Firebase Firestore (cloud NoSQL)
-- **Authentication**: JWT with bcryptjs
-- **Payment Processing**: Stripe API
-- **File Upload**: Multer
-- **Security**: Helmet.js, CORS, Rate Limiting
-
-### Cloud Services (Production)
-- **Platform**: Firebase
-  - Firestore (NoSQL Database)
-  - Cloud Functions (Serverless backend)
-  - Cloud Messaging (Push Notifications)
-  - Cloud Storage (File storage)
-  - Authentication (Optional)
-  - Hosting (Optional)
-
-- **Payment Gateway**: Stripe / Paddle
-
-## 📁 Project Structure
-
-```
-SmartRent/
-├── frontend/               # Next.js React application
-│   ├── src/
-│   │   ├── app/           # App router pages
-│   │   │   ├── auth/      # Authentication pages
-│   │   │   ├── dashboard/ # Main dashboard
-│   │   │   ├── properties/# Property management
-│   │   │   ├── tenants/   # Tenant management
-│   │   │   ├── payments/  # Payment processing
-│   │   │   └── maintenance/ # Maintenance requests
-│   │   ├── components/    # Reusable components
-│   │   ├── contexts/      # React contexts
-│   │   ├── hooks/         # Custom hooks
-│   │   ├── lib/           # Utilities and helpers
-│   │   └── types/         # TypeScript definitions
-│   └── package.json
-│
-├── backend/               # Express.js API server
-│   ├── src/
-│   │   ├── routes/       # API endpoints
-│   │   │   ├── auth.js   # Authentication
-│   │   │   ├── properties.js
-│   │   │   ├── tenants.js
-│   │   │   ├── payments.js
-│   │   │   └── maintenance.js
-│   │   ├── middleware/   # Custom middleware
-│   │   ├── config/       # Configuration files
-│   │   └── app.js        # Express application
-│   ├── migrations/       # Database migrations
-│   └── package.json
-│
-└── README.md
+1. **Install dependencies**
+```powershell
+npm install
 ```
 
-## 🚀 Getting Started
+2. **Configure environment**
 
-### Prerequisites
-- Node.js (v18 or higher)
-- npm or yarn
-- SQLite3 (for development)
+Create `.env` file in the project root:
 
-### Installation
+```env
+# Server Configuration
+PORT=5000
+NODE_ENV=development
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/yourusername/smartrent.git
-   cd smartrent
-   ```
+# Authentication
+JWT_SECRET=your_secure_random_jwt_secret_here
 
-2. **Install Backend Dependencies**
-   ```bash
-   cd backend
-   npm install
+# Stripe Payment Integration
+STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key
+STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret
 
+# Database (Development)
+DATABASE_PATH=./smartrent.db
 
-3. **Configure Environment Variables**
+# Firebase Configuration (Production)
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk@your-project.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYour_Private_Key_Here\n-----END PRIVATE KEY-----\n"
+FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 
-   Backend (.env):
-   ```env
-   PORT=5000
-   JWT_SECRET=your_jwt_secret_key
-   STRIPE_SECRET_KEY=your_stripe_secret_key
-   STRIPE_WEBHOOK_SECRET=your_stripe_webhook_secret
-   DATABASE_PATH=./smartrent.db
+# API Configuration
+API_URL=http://localhost:5000
+FRONTEND_URL=http://localhost:3000
+```
 
-   FIREBASE_PROJECT_ID= your_firebase_project_ID
-   FIREBASE_STORAGE_BUCKET= your_firebase_storage_bucket
-   ```
+**Important Notes**:
+- `FIREBASE_PRIVATE_KEY` must include literal `\n` characters for newlines when stored as environment variable
+- Alternatively, place `firebase-service-account.json` in the project root and configure `src/config/firebase.js` to load from file
+- Never commit `.env` or service account JSON files to version control
 
+3. **Run database migrations** (if using SQLite locally)
+```powershell
+npm run migrate
+```
 
+4. **Start development server**
+```powershell
+npm run dev
+```
 
-4. **Run Database Migrations**
-   ```bash
-   cd backend
-   npm run migrate
-   ```
+Server will run on http://localhost:5000
 
-5. **Start Backend Server**
-   ```bash
-   cd backend
-   npm run dev
-   ```
-   Server runs on http://localhost:5000
+## Project Structure
 
+```
+Backend/
+├── src/
+│   ├── routes/                 # API route handlers
+│   │   ├── auth.js             # User authentication and registration
+│   │   ├── properties.js       # Property CRUD operations
+│   │   ├── leases.js           # Lease management
+│   │   ├── payments.js         # Payment processing and Stripe webhooks
+│   │   ├── maintenance.js      # Maintenance request handling
+│   │   ├── notifications.js    # Push notification management
+│   │   └── landlords.js        # Landlord-specific operations
+│   ├── services/               # Business logic layer
+│   │   ├── firestore.service.js
+│   │   ├── properties.service.js
+│   │   ├── leases.service.js
+│   │   └── users.service.js
+│   ├── middleware/             # Express middleware
+│   │   └── auth.js             # JWT authentication middleware
+│   ├── config/                 # Configuration modules
+│   │   ├── database.js         # Database connection setup
+│   │   ├── firebase.js         # Firebase Admin SDK initialization
+│   │   └── config.js           # General configuration
+│   ├── app.js                  # Express app configuration
+│   └── server.js               # Server entry point
+├── migrations/                 # Database migration scripts
+├── firebase-service-account.json  # Firebase credentials (not committed)
+├── .env                        # Environment variables (not committed)
+└── package.json                # Dependencies and scripts
+```
 
-## 📱 User Roles
+## API Documentation
+
+Detailed API documentation is available in:
+- `API_DOCUMENTATION.md` - Complete endpoint reference
+- `API_RESPONSE_REFERENCE.md` - Response format examples
+
+### API Testing
+
+Run the test script to verify all endpoints:
+```powershell
+node test-api.js
+```
+
+Or test individual endpoints:
+```powershell
+node check-properties.js
+node test-firestore.js
+```
+
+## Available Scripts
+
+```powershell
+npm run dev          # Start development server with nodemon
+npm start            # Start production server
+npm run migrate      # Run database migrations
+npm test             # Run test suite
+```
+
+## Key API Endpoints
+
+### Authentication
+- `POST /api/auth/register` - User registration
+- `POST /api/auth/login` - User login
+- `GET /api/auth/me` - Get current user profile
+
+### Properties
+- `GET /api/properties` - List properties (filtered by user role)
+- `GET /api/properties/:id` - Get property details
+- `POST /api/properties` - Create property (landlord only)
+- `PUT /api/properties/:id` - Update property (landlord only)
+- `DELETE /api/properties/:id` - Delete property (landlord only)
+
+### Leases
+- `GET /api/leases` - List leases
+- `GET /api/leases/:id` - Get lease details
+- `POST /api/leases` - Create lease (landlord only)
+- `PUT /api/leases/:id` - Update lease (landlord only)
+
+### Payments
+- `GET /api/payments` - List payments
+- `GET /api/payments/:id` - Get payment details
+- `POST /api/payments/create-checkout-session` - Create Stripe checkout session
+- `POST /api/payments/webhook` - Stripe webhook handler
+
+### Maintenance
+- `GET /api/maintenance` - List maintenance requests
+- `POST /api/maintenance` - Create maintenance request (tenant)
+- `PUT /api/maintenance/:id` - Update request status (landlord)
+
+## Database Setup
+
+### Local Development (SQLite)
+```powershell
+# Run migrations to create tables
+npm run migrate
+```
+
+### Production (Firestore)
+1. Create Firebase project at https://console.firebase.google.com
+2. Enable Firestore database
+3. Download service account JSON from Project Settings > Service Accounts
+4. Place JSON file in project root or configure environment variables
+5. Update `src/config/firebase.js` if needed
+
+## Stripe Webhook Testing
+
+For local webhook testing:
+
+1. **Install Stripe CLI**
+```powershell
+# Download from https://stripe.com/docs/stripe-cli
+stripe login
+```
+
+2. **Forward webhooks to local server**
+```powershell
+stripe listen --forward-to localhost:5000/api/payments/webhook
+```
+
+3. **Copy webhook signing secret** to `.env` as `STRIPE_WEBHOOK_SECRET`
+
+Alternatively, use ngrok:
+```powershell
+ngrok http 5000
+# Use the ngrok URL in Stripe Dashboard webhook configuration
+```
+
+## Security Features
+
+- JWT-based authentication with bcrypt password hashing
+- Role-based access control (landlord vs tenant)
+- Rate limiting on API endpoints
+- CORS protection
+- Helmet.js security headers
+- Input validation and sanitization
+- SQL injection protection
+
+## Deployment
+
+### Render
+1. Create new Web Service on Render
+2. Connect GitHub repository
+3. Configure environment variables in Render dashboard
+4. Deploy from `main` branch
+
+### Environment Variables for Production
+Set all variables from `.env` example above in your hosting platform's environment configuration.
+
+## Troubleshooting
+
+**Firebase key format error**: Ensure `FIREBASE_PRIVATE_KEY` includes `\n` newline characters. If using a JSON file, verify the path is correct in `src/config/firebase.js`.
+
+**Database connection failed**: For SQLite, verify `DATABASE_PATH` points to a writable location. For Firestore, check Firebase credentials.
+
+**Stripe webhook signature verification failed**: Confirm `STRIPE_WEBHOOK_SECRET` matches the value from Stripe CLI or dashboard.
+
+**CORS errors**: Verify `FRONTEND_URL` in `.env` matches your frontend origin and is included in CORS configuration.
+
+## Contributing
+
+1. Create feature branch: `git checkout -b feature/your-feature`
+2. Make changes and test locally
+3. Run tests: `npm test`
+4. Commit: `git commit -m "Description"`
+5. Push and create pull request
+
+## License
+
+MIT License
 
 ### Tenant
 - Register and manage personal profile
@@ -229,7 +322,7 @@ This project is licensed under the MIT License.
 
 - **Course**: CNG 495 - Cloud Computing
 - **Semester**: Fall 2025
-- **Institution**: [Your University Name]
+- **Institution**: METU NCC
 
 ## 🙏 Acknowledgments
 
@@ -250,4 +343,4 @@ This project is licensed under the MIT License.
 
 ---
 
-**Built with ❤️ by Team SmartRent**
+**Built by Team SmartRent**
